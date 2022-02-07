@@ -4,7 +4,14 @@
     )
 end
 
+@recipe(GriddedPlot) do scene
+    Attributes(
+        colormap = :jet
+    )
+end
+
 const CanalPlotArg = CanalPlot{<:Tuple{AbstractVector, CanalConfig}}
+const GriddedPlotArg = GriddedPlot{<:Tuple{AbstractGrid}}
 # Makie.argument_names(::Type{<: CanalPlotArg}) = (:x, :canal,)
 
 function Makie.plot!(cp::CanalPlotArg)
@@ -40,4 +47,19 @@ function Makie.plot!(cp::CanalPlotArg)
     lines!(cp, xs, ys, color = cp.color)
     lines!(cp, xs, ysab, color = cp.color)
     cp
+end
+
+function Makie.plot!(gp::GriddedPlotArg)
+    grid = gp[1]
+
+    mat = Observable(innerview(grid.val))
+
+    function update_plot(grid)
+        empty!(mat[])
+        mat[] = innerview(grid)
+    end
+
+    Makie.Observables.onany(update_plot, grid)
+
+    contourf!(gp, getxs(grid.val), getys(grid.val), mat, colormap = gp.colormap)
 end

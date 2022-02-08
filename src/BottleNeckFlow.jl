@@ -3,11 +3,15 @@ module BottleNeckFlow
 # using RecipesBase
 using Makie
 
-export CanalConfig, δ,
+export
+    Simulation, 
+    CanalConfig, δ, SimParam,
     GridBox,
     AbstractGrid,
     UGrid,
     VGrid,
+    PGrid,
+    VortGrid,
     getxs,
     getys,
     poiseuille,
@@ -16,6 +20,7 @@ export CanalConfig, δ,
 include("constants.jl")
 include("canal.jl")
 include("mesh.jl")
+include("simulation.jl")
 include("poiseuille.jl")
 include("schemes.jl")
 

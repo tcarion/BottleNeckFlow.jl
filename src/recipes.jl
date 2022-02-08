@@ -52,14 +52,14 @@ end
 function Makie.plot!(gp::GriddedPlotArg)
     grid = gp[1]
 
-    mat = Observable(innerview(grid.val))
+    # mat = Observable(trueview(grid.val))
 
-    function update_plot(grid)
-        empty!(mat[])
-        mat[] = innerview(grid)
-    end
+    # function update_plot(grid)
+    #     empty!(mat[])
+    #     mat[] = trueview(grid)
+    # end
 
-    Makie.Observables.onany(update_plot, grid)
+    # Makie.Observables.onany(update_plot, grid)
 
-    contourf!(gp, getxs(grid.val), getys(grid.val), mat, colormap = gp.colormap)
+    contourf!(gp, getxs(grid.val), getys(grid.val), grid, colormap = gp.colormap)
 end

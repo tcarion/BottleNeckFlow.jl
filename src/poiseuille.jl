@@ -24,3 +24,4 @@ end
 poiseuille!(y::AbstractGrid, gb::GridBox, params::SimParam) = poiseuille!(y, gb, params.Q)
 
 poiseuille!(sim::Simulation) = poiseuille!(sim.u, sim.u.grid, sim.params)
+poiseuille(sim::Simulation, y) = poiseuille(y, sim.u.grid, sim.params.Q)

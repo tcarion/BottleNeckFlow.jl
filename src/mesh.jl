@@ -26,6 +26,7 @@ Base.getindex(g::AbstractGrid, i::Int) = getindex(g.mesh, i)
 Base.getindex(g::AbstractGrid, i::Int, j::Int) = getindex(g.mesh, i, j)
 Base.setindex!(g::AbstractGrid, v,  i::Int) = setindex!(g.mesh, v, i)
 Base.setindex!(g::AbstractGrid, v,  i::Int, j::Int) = setindex!(g.mesh, v, i, j)
+Base.copy(g::AbstractGridGhost) = typeof(g)(copy(g.mesh), g.grid, (copy(g.ghost[1]), (copy(g.ghost[2]))), g.ghostdim)
 
 getxs(g::AbstractGrid) = 0.5*g.grid.dx:g.grid.dx:g.grid.L-0.5*g.grid.dx
 getys(g::AbstractGrid) = (-g.grid.D + g.grid.dx)*0.5:g.grid.dy:(g.grid.D - g.grid.dx)*0.5
@@ -96,9 +97,11 @@ function UGrid{T}(gb::GridBox) where T <: AbstractFloat
 end
 
 UGrid(gb::GridBox) = UGrid{Float64}(gb)
-average2d(g::UGrid, i, j) = 0.25 * (g[i, j] + g[i, j-1] + g[i+1, j - 1] + g[i+1, j]) 
-# getxs(g::UGrid) = 0:g.grid.dx:g.grid.L
-# getys(g::UGrid) = -g.grid.D*0.5 + 0.5*g.grid.dy:g.grid.dy:g.grid.D*0.5 - 0.5*g.grid.dy
+projectionV(g::UGrid, i, j) = 0.25 * (g[i, j] + g[i, j-1] + g[i+1, j - 1] + g[i+1, j])
+getxs(g::UGrid) = 0:g.grid.dx:g.grid.L
+getys(g::UGrid) = -g.grid.D*0.5 + 0.5*g.grid.dy:g.grid.dy:g.grid.D*0.5 - 0.5*g.grid.dy
+
+inrange(p::UGrid) = 2:size(p)[1]-1, 1:size(p)[2]
 
 # trueview(g::UGrid) = @view g.mesh[:, 2:end-1]
 
@@ -123,10 +126,13 @@ end
 #     VGrid(zeros(T, gb.m + 2, gb.n + 1), gb)
 # end
 VGrid(gb::GridBox) = VGrid{Float64}(gb)
-average2d(g::VGrid, i, j) = 0.25 * (g[i, j] + g[i, j+1] + g[i-1, j + 1] + g[i-1, j]) 
+projectionU(g::VGrid, i, j) = 0.25 * (g[i, j] + g[i, j+1] + g[i-1, j + 1] + g[i-1, j]) 
 
-# getxs(g::VGrid) = 0+g.grid.dx*0.5:g.grid.dx:g.grid.L-g.grid.dx*0.5
-# getys(g::VGrid) = -g.grid.D*0.5:g.grid.dy:g.grid.D*0.5
+getxs(g::VGrid) = 0+g.grid.dx*0.5:g.grid.dx:g.grid.L-g.grid.dx*0.5
+getys(g::VGrid) = -g.grid.D*0.5:g.grid.dy:g.grid.D*0.5
+
+inrange(v::VGrid) = 1:size(v)[1], 2:size(v)[2]-1
+
 
 # trueview(g::VGrid) = @view g.mesh[2:end-1, :]
 
@@ -138,6 +144,8 @@ function PGrid{T}(gb::GridBox) where T <: AbstractFloat
     PGrid(zeros(T, gb.m, gb.n), gb)
 end
 PGrid(gb::GridBox) = PGrid{Float64}(gb)
+
+inrange(p::PGrid) = 2:size(p)[1]-1, 2:size(p)[2]-1
 # getxs(g::PGrid) = 0+g.grid.dx*0.5:g.grid.dx:g.grid.L-g.grid.dx*0.5
 # getys(g::PGrid) = -g.grid.D*0.5+0.5*g.grid.dy:g.grid.dy:g.grid.D*0.5-0.5*g.grid.dy
 
@@ -158,11 +166,33 @@ function VortGrid(u::UGrid, v::VGrid)
     vort = VortGrid(u.grid)
     for ei in eachindex(vort)
         i,j = Tuple(ei)
-        dvdx = (average2d(v, i+1, j) - average2d(v, i, j)) / v.grid.dx
-        dudy = (average2d(u, i, j+1) - average2d(u, i, j)) / v.grid.dy
+        dvdx = (projectionU(v, i+1, j) - projectionU(v, i, j)) / v.grid.dx
+        dudy = (projectionV(u, i, j+1) - projectionV(u, i, j)) / v.grid.dy
         vort[ei] = dvdx - dudy
     end
     vort
+end
+
+struct DivGrid{T} <: AbstractGrid{T}
+    mesh::Matrix{T}
+    grid::GridBox
+end
+function DivGrid{T}(gb::GridBox) where T <: AbstractFloat
+    DivGrid(zeros(T, gb.m, gb.n), gb)
+end
+DivGrid(gb::GridBox) = DivGrid{Float64}(gb)
+getxs(g::DivGrid) = 0+g.grid.dx*0.5:g.grid.dx:g.grid.L-g.grid.dx*0.5
+getys(g::DivGrid) = -g.grid.D*0.5+0.5*g.grid.dy:g.grid.dy:g.grid.D*0.5-0.5*g.grid.dy
+
+function DivGrid(u::UGrid, v::VGrid)
+    div = DivGrid(u.grid)
+    for ei in eachindex(div)
+        i,j = Tuple(ei)
+        dudx = (u[i+1, j] - u[i, j]) / v.grid.dx
+        dvdy = (v[i, j+1] - v[i, j]) / v.grid.dy
+        div[ei] = dudx + dvdy
+    end
+    div
 end
 
 # trueview(g::VortGrid) = @view g.mesh[:, :]

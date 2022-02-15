@@ -22,3 +22,19 @@ function δ(x::Real, c::CanalConfig)
 end
 
 δ(x::AbstractVector, c::CanalConfig) = δ.(x, Ref(c))
+
+function inbump(c::CanalConfig, x, y)
+    diff = abs(x - c.x0)
+    l = c.Ld * 0.5
+    if diff <= l
+        tr = cos(2pi * (x - c.x0) / c.Ld)
+        yc = c.hd * ( (1 + tr) * 0.5 )^2
+        if c.H - abs(y) <= yc
+            true
+        else
+            false
+        end
+    else
+        false
+    end
+end

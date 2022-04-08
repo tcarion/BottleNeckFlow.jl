@@ -1,8 +1,10 @@
-function runsim!(sim::Simulation, n)
+function runsim!(sim::Simulation, n, fname = ""; save = 50)
     sim.step !== 0 && error("Simulation is not at initial state.") 
+    
     poiseuille!(sim)
     boundaries!(sim)
-
+    !isempty(fname) && create(fname, sim)
+    
     un_1 = copy(sim.u)
     vn_1 = copy(sim.v)
     ti = @elapsed begin
@@ -11,6 +13,8 @@ function runsim!(sim::Simulation, n)
     with_logger(sim.logger) do 
         @info "Step number $step done in $(round(ti * 1.0e3, digits = 2))ms\nSimulation time : $(sim.step * sim.dt)"
     end
+    saveif(fname, sim, save)
+
     for step in 2:n
         ti = @elapsed begin
             make_step!(sim, un_1, vn_1)
@@ -22,9 +26,17 @@ function runsim!(sim::Simulation, n)
             Re_h_omega = $(reynhvort(sim))
             """
         end
+
+        saveif(fname, sim, save)
+
         un_1 = copy(sim.u)
         vn_1 = copy(sim.v)
     end
+    add_to_nc(fname, sim)
+end
+
+function saveif(fname, sim, save)
+    !isempty(fname) && (sim.step % save == 0) && add_to_nc(fname, sim)
 end
 
 function make_step!(sim::Simulation)

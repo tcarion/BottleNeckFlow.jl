@@ -3,6 +3,7 @@ using CairoMakie
 using GLMakie
 using Test
 using Logging
+using Rasters
 
 bn = BottleNeckFlow
 

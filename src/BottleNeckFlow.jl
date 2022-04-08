@@ -3,6 +3,10 @@ module BottleNeckFlow
 # using RecipesBase
 using Makie
 using Logging
+using NCDatasets
+using Dates
+# using DataStructures
+# using Rasters
 
 export
     Simulation, 
@@ -27,8 +31,11 @@ export
     residual,
     step_poisson!,
     poisson_project!,
-    runsim!
+    runsim!,
+    create,
+    add_to_nc
 
+include("utils.jl")
 include("constants.jl")
 include("canal.jl")
 include("mesh.jl")
@@ -36,6 +43,7 @@ include("simulation.jl")
 include("poiseuille.jl")
 include("schemes.jl")
 include("diagnostic.jl")
+include("io.jl")
 include("run.jl")
 
 include("recipes.jl")

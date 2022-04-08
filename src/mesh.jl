@@ -17,6 +17,13 @@ GridBox(L, D, dx::AbstractFloat, dy::AbstractFloat) = GridBox(L, D, convert(Int,
 GridBox(canal::CanalConfig, dx::AbstractFloat, dy::AbstractFloat) = GridBox(canal.L, canal.d, dx, dy)
 GridBox(canal::CanalConfig, h::AbstractFloat) = GridBox(canal, h, h)
 Base.size(gb::GridBox) = (gp.m, gb.n)
+function Base.show(io::IO, gb::GridBox)
+    println(io, "### GridBox:")
+    for names in fieldnames(typeof(gb))
+        println(io, "\t $(string(names)): $(getfield(gb, names))")
+    end
+end
+from_ncf(::Type{GridBox}, fname::String) = _convert(GridBox, fname)
 
 abstract type AbstractGrid{T} <: AbstractArray{T, 2} end
 
@@ -27,6 +34,7 @@ Base.getindex(g::AbstractGrid, i::Int, j::Int) = getindex(g.mesh, i, j)
 Base.setindex!(g::AbstractGrid, v,  i::Int) = setindex!(g.mesh, v, i)
 Base.setindex!(g::AbstractGrid, v,  i::Int, j::Int) = setindex!(g.mesh, v, i, j)
 Base.copy(g::AbstractGridGhost) = typeof(g)(copy(g.mesh), g.grid, (copy(g.ghost[1]), (copy(g.ghost[2]))), g.ghostdim)
+Base.copy(g::AbstractGrid) = typeof(g)(copy(g.mesh), g.grid)
 
 getxs(g::AbstractGrid) = 0.5*g.grid.dx:g.grid.dx:g.grid.L-0.5*g.grid.dx
 getys(g::AbstractGrid) = (-g.grid.D + g.grid.dx)*0.5:g.grid.dy:(g.grid.D - g.grid.dx)*0.5
@@ -88,12 +96,16 @@ end
 # function UGrid{T}(gb::GridBox) where T <: AbstractFloat
 #     UGrid(zeros(T, gb.m + 1, gb.n + 2), gb)
 # end
+function UGrid(matrix::Matrix{T}, gb::GridBox) where T <: AbstractFloat
+    nx = size(matrix, 1)
+    ghost = (zeros(T, nx), zeros(T, nx))
+    UGrid{T}(matrix, gb, ghost, 2)
+end
 function UGrid{T}(gb::GridBox) where T <: AbstractFloat
     nx = gb.m + 1
     ny = gb.n
     mesh = zeros(T, nx, ny)
-    ghost = (zeros(T, nx), zeros(T, nx))
-    UGrid(mesh, gb, ghost, 2)
+    UGrid(mesh, gb)
 end
 
 UGrid(gb::GridBox) = UGrid{Float64}(gb)
@@ -111,12 +123,16 @@ struct VGrid{T} <: AbstractGridGhost{T}
     ghost::Tuple{Vector{T}, Vector{T}}
     ghostdim::Int
 end
+function VGrid(matrix::Matrix{T}, gb::GridBox) where T <: AbstractFloat
+    ny = size(matrix, 2)
+    ghost = (zeros(T, ny), zeros(T, ny))
+    VGrid{T}(matrix, gb, ghost, 1)
+end
 function VGrid{T}(gb::GridBox) where T <: AbstractFloat
     nx = gb.m
     ny = gb.n + 1
     mesh = zeros(T, nx, ny)
-    ghost = (zeros(T, ny), zeros(T, ny))
-    VGrid(mesh, gb, ghost, 1)
+    VGrid(mesh, gb)
 end
 # struct VGrid{T} <: AbstractGrid{T}
 #     mesh::Matrix{T}
@@ -139,6 +155,9 @@ inrange(v::VGrid) = 1:size(v)[1], 2:size(v)[2]-1
 struct PGrid{T} <: AbstractGrid{T}
     mesh::Matrix{T}
     grid::GridBox
+end
+function PGrid(matrix::Matrix{T}, gb::GridBox) where T
+    PGrid{T}(matrix, gb)
 end
 function PGrid{T}(gb::GridBox) where T <: AbstractFloat
     PGrid(zeros(T, gb.m, gb.n), gb)

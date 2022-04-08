@@ -6,6 +6,14 @@ struct CanalConfig
     L::Real
     d::Real
 end
+function Base.show(io::IO, canal::CanalConfig)
+    println(io, "### Canal:")
+    for names in fieldnames(typeof(canal))
+        println(io, "\t $(string(names)): $(getfield(canal, names))")
+    end
+end
+
+from_ncf(::Type{CanalConfig}, fname::String) = _convert(CanalConfig, fname)
 
 CanalConfig(H::Real, hd::Real, Ld::Real, x0::Real, L::Real) = CanalConfig(H, hd, Ld, x0, L, 2*H)
 CanalConfig(H::Real) = CanalConfig(H, 0.55*H, 2*H, 4*H, 16*H)

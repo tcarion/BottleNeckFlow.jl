@@ -1,3 +1,6 @@
+abstract type AbstractGrid{T} <: AbstractArray{T, 2} end
+
+abstract type AbstractGridGhost{T} <: AbstractGrid{T} end
 struct GridBox
     L::Float32
     D::Float32
@@ -25,58 +28,22 @@ function Base.show(io::IO, gb::GridBox)
 end
 from_ncf(::Type{GridBox}, fname::String) = _convert(GridBox, fname)
 
-abstract type AbstractGrid{T} <: AbstractArray{T, 2} end
-
-abstract type AbstractGridGhost{T} <: AbstractGrid{T} end
-Base.size(g::AbstractGrid) = size(g.mesh)
-Base.getindex(g::AbstractGrid, i::Int) = getindex(g.mesh, i)
-Base.getindex(g::AbstractGrid, i::Int, j::Int) = getindex(g.mesh, i, j)
-Base.setindex!(g::AbstractGrid, v,  i::Int) = setindex!(g.mesh, v, i)
-Base.setindex!(g::AbstractGrid, v,  i::Int, j::Int) = setindex!(g.mesh, v, i, j)
-Base.copy(g::AbstractGridGhost) = typeof(g)(copy(g.mesh), g.grid, (copy(g.ghost[1]), (copy(g.ghost[2]))), g.ghostdim)
-Base.copy(g::AbstractGrid) = typeof(g)(copy(g.mesh), g.grid)
+Base.parent(g::AbstractGrid) = parent(g.mesh)
+Base.size(g::AbstractGrid) = size(parent(g))
+Base.getindex(g::AbstractGrid, i::Int) = getindex(parent(g), i)
+Base.getindex(g::AbstractGrid, i::Int, j::Int) = getindex(parent(g), i, j)
+Base.setindex!(g::AbstractGrid, v,  i::Int) = setindex!(parent(g), v, i)
+Base.setindex!(g::AbstractGrid, v,  i::Int, j::Int) = setindex!(parent(g), v, i, j)
+# Base.copy(g::AbstractGridGhost) = typeof(g)(copy(parent(g)), g.grid, (copy(g.ghost[1]), (copy(g.ghost[2]))), g.ghostdim)
+Base.copy(g::AbstractGrid) = typeof(g)(copy(parent(g)), g.grid, ghostinds1(g), ghostinds2(g))
 
 getxs(g::AbstractGrid) = 0.5*g.grid.dx:g.grid.dx:g.grid.L-0.5*g.grid.dx
 getys(g::AbstractGrid) = (-g.grid.D + g.grid.dx)*0.5:g.grid.dy:(g.grid.D - g.grid.dx)*0.5
 
-function Base.getindex(g::AbstractGridGhost, i::Int, j::Int)
-    try
-        getindex(g.mesh, i, j)
-    catch e
-        if e isa BoundsError
-            gd = g.ghostdim
-            od = gd == 1 ? 2 : 1
-            if e.i[g.ghostdim] == 0
-                getindex(g.ghost[1], e.i[od])
-            elseif e.i[g.ghostdim] == size(g)[gd] + 1
-                getindex(g.ghost[2], e.i[od])
-            else
-                rethrow(e)
-            end
-        else
-            rethrow(e)
-        end
-    end
-end
-function Base.setindex!(g::AbstractGridGhost, v, i::Int, j::Int)
-    try
-        setindex!(g.mesh, v, i, j)
-    catch e
-        if e isa BoundsError
-            gd = g.ghostdim
-            od = gd == 1 ? 2 : 1
-            if e.i[g.ghostdim] == 0
-                setindex!(g.ghost[1], v, e.i[od])
-            elseif e.i[g.ghostdim] == size(g)[gd] + 1
-                setindex!(g.ghost[2], v, e.i[od])
-            else
-                rethrow(e)
-            end
-        else
-            rethrow(e)
-        end
-    end
-end
+ghostinds1(g::AbstractGridGhost) = g.ghostinds1
+ghostinds2(g::AbstractGridGhost) = g.ghostinds2
+
+average(v) = sum(v) / length(v)
 # struct UGrid{T} <: AbstractGrid{T}
 #     mesh::Matrix{T}
 #     grid::GridBox
@@ -86,8 +53,9 @@ end
 struct UGrid{T} <: AbstractGridGhost{T}
     mesh::Matrix{T}
     grid::GridBox
-    ghost::Tuple{Vector{T}, Vector{T}}
-    ghostdim::Int
+    # ghost::Tuple{Vector{T}, Vector{T}}
+    ghostinds1::AbstractVector{CartesianIndex}
+    ghostinds2::AbstractVector{CartesianIndex}
 end
 
 # function UGrid{T}(gb::GridBox) where T <: AbstractFloat
@@ -97,39 +65,59 @@ end
 #     UGrid(zeros(T, gb.m + 1, gb.n + 2), gb)
 # end
 function UGrid(matrix::Matrix{T}, gb::GridBox) where T <: AbstractFloat
-    nx = size(matrix, 1)
-    ghost = (zeros(T, nx), zeros(T, nx))
-    UGrid{T}(matrix, gb, ghost, 2)
+    nx, ny = size(matrix)
+    # ghost = (zeros(T, nx), zeros(T, nx))
+    g1 = [CartesianIndex(i, 1) for i in 1:nx]
+    g2 = [CartesianIndex(i, ny) for i in 1:nx]
+    # UGrid{T}(matrix, gb, CartesianIndices((1:nx, 1)), CartesianIndices((1:nx, ny)))
+    UGrid{T}(matrix, gb, g1, g2)
 end
 function UGrid{T}(gb::GridBox) where T <: AbstractFloat
     nx = gb.m + 1
-    ny = gb.n
+    ny = gb.n + 2
     mesh = zeros(T, nx, ny)
     UGrid(mesh, gb)
 end
 
 UGrid(gb::GridBox) = UGrid{Float64}(gb)
-projectionV(g::UGrid, i, j) = 0.25 * (g[i, j] + g[i, j-1] + g[i+1, j - 1] + g[i+1, j])
+atsw(::Type{<:UGrid}, i, j) = CartesianIndex(i, j-1)
+atse(::Type{<:UGrid}, i, j) = CartesianIndex(i+1, j-1)
+atne(::Type{<:UGrid}, i, j) = CartesianIndex(i+1, j)
+atnw(::Type{<:UGrid}, i, j) = CartesianIndex(i, j)
+atleft(::Type{<:UGrid}, i, j) = CartesianIndex(i-1, j-1)
+atright(::Type{<:UGrid}, i, j) = CartesianIndex(i, j-1)
+# projectionV(g::UGrid, i, j) = 0.25 * (g[i, j] + g[i, j-1] + g[i+1, j - 1] + g[i+1, j])
+# projonV(::UGrid, i, j) = CartesianIndex.([(i, j-1), (i+1, j-1), (i+1, j), (i, j)])
 getxs(g::UGrid) = 0:g.grid.dx:g.grid.L
-getys(g::UGrid) = -g.grid.D*0.5 + 0.5*g.grid.dy:g.grid.dy:g.grid.D*0.5 - 0.5*g.grid.dy
-
-inrange(p::UGrid) = 2:size(p)[1]-1, 1:size(p)[2]
-
+getys(g::UGrid) = -g.grid.D*0.5 - 0.5*g.grid.dy: g.grid.dy :g.grid.D*0.5 + 0.5*g.grid.dy
+# inrange(p::UGrid) = 2:size(p, 1)-1, 1:size(p, 2)
+function trueinds(g::UGrid)
+    nx, ny = size(g)
+    CartesianIndices((nx, 2:ny-1))
+end
+function insideinds(g::UGrid) 
+    nx, ny = size(g)
+    CartesianIndices((2:nx-1, 2:ny-1))
+end
 # trueview(g::UGrid) = @view g.mesh[:, 2:end-1]
 
 struct VGrid{T} <: AbstractGridGhost{T}
     mesh::Matrix{T}
     grid::GridBox
-    ghost::Tuple{Vector{T}, Vector{T}}
-    ghostdim::Int
+    # ghost::Tuple{Vector{T}, Vector{T}}
+    # ghostdim::Int
+    ghostinds1::AbstractVector{CartesianIndex}
+    ghostinds2::AbstractVector{CartesianIndex}
 end
 function VGrid(matrix::Matrix{T}, gb::GridBox) where T <: AbstractFloat
-    ny = size(matrix, 2)
-    ghost = (zeros(T, ny), zeros(T, ny))
-    VGrid{T}(matrix, gb, ghost, 1)
+    nx, ny = size(matrix)
+    g1 = [CartesianIndex(1, j) for j in 1:ny]
+    g2 = [CartesianIndex(nx, j) for j in 1:ny]
+    # ghost = (zeros(T, ny), zeros(T, ny))
+    VGrid{T}(matrix, gb, g1, g2)
 end
 function VGrid{T}(gb::GridBox) where T <: AbstractFloat
-    nx = gb.m
+    nx = gb.m + 2
     ny = gb.n + 1
     mesh = zeros(T, nx, ny)
     VGrid(mesh, gb)
@@ -142,13 +130,35 @@ end
 #     VGrid(zeros(T, gb.m + 2, gb.n + 1), gb)
 # end
 VGrid(gb::GridBox) = VGrid{Float64}(gb)
-projectionU(g::VGrid, i, j) = 0.25 * (g[i, j] + g[i, j+1] + g[i-1, j + 1] + g[i-1, j]) 
+# projectionU(g::VGrid, i, j) = 0.25 * (g[i, j] + g[i, j+1] + g[i-1, j + 1] + g[i-1, j]) 
+# projonU(::VGrid, i, j) = CartesianIndex.([(i-1, j), (i, j), (i, j+1), (i-1, j+1)])
+atsw(::Type{<:VGrid}, i, j) = CartesianIndex(i-1, j)
+atse(::Type{<:VGrid}, i, j) = CartesianIndex(i, j)
+atne(::Type{<:VGrid}, i, j) = CartesianIndex(i, j+1)
+atnw(::Type{<:VGrid}, i, j) = CartesianIndex(i-1, j+1)
+attop(::Type{<:VGrid}, i, j) = CartesianIndex(i-1, j)
+atbot(::Type{<:VGrid}, i, j) = CartesianIndex(i-1, j-1)
 
-getxs(g::VGrid) = 0+g.grid.dx*0.5:g.grid.dx:g.grid.L-g.grid.dx*0.5
+getxs(g::VGrid) = -g.grid.dx*0.5:g.grid.dx:g.grid.L+g.grid.dx*0.5
 getys(g::VGrid) = -g.grid.D*0.5:g.grid.dy:g.grid.D*0.5
 
 inrange(v::VGrid) = 1:size(v)[1], 2:size(v)[2]-1
+function trueinds(g::VGrid)
+    nx, ny = size(g)
+    CartesianIndices((2:nx-1, ny))
+end
+function insideinds(g::VGrid) 
+    nx, ny = size(g)
+    CartesianIndices((2:nx-1, 2:ny-1))
+end
 
+neighbours(g::Type{<:AbstractGridGhost}, i, j) = [atsw(g, i, j), atse(g, i, j), atne(g, i, j), atnw(g, i, j)]
+neighbours(g::Type{<:AbstractGridGhost},I::CartesianIndex) = neighbours(g, Tuple(I)...)
+truegrid(g::AbstractGridGhost) = g[trueinds(g)]
+atsw(g::Type{<:AbstractGridGhost}, I::CartesianIndex) = atsw(g, Tuple(I)...)
+atse(g::Type{<:AbstractGridGhost}, I::CartesianIndex) = atse(g, Tuple(I)...)
+atne(g::Type{<:AbstractGridGhost}, I::CartesianIndex) = atne(g, Tuple(I)...)
+atnw(g::Type{<:AbstractGridGhost}, I::CartesianIndex) = atnw(g, Tuple(I)...)
 
 # trueview(g::VGrid) = @view g.mesh[2:end-1, :]
 
@@ -156,15 +166,19 @@ struct PGrid{T} <: AbstractGrid{T}
     mesh::Matrix{T}
     grid::GridBox
 end
-function PGrid(matrix::Matrix{T}, gb::GridBox) where T
-    PGrid{T}(matrix, gb)
-end
+# function PGrid(matrix::Matrix{T}, gb::GridBox) where T
+#     PGrid{T}(matrix, gb)
+# end
 function PGrid{T}(gb::GridBox) where T <: AbstractFloat
     PGrid(zeros(T, gb.m, gb.n), gb)
 end
 PGrid(gb::GridBox) = PGrid{Float64}(gb)
 
-inrange(p::PGrid) = 2:size(p)[1]-1, 2:size(p)[2]-1
+# inrange(p::PGrid) = 2:size(p)[1]-1, 2:size(p)[2]-1
+function insideinds(g::PGrid) 
+    nx, ny = size(g)
+    CartesianIndices((2:nx-1, 2:ny-1))
+end
 # getxs(g::PGrid) = 0+g.grid.dx*0.5:g.grid.dx:g.grid.L-g.grid.dx*0.5
 # getys(g::PGrid) = -g.grid.D*0.5+0.5*g.grid.dy:g.grid.dy:g.grid.D*0.5-0.5*g.grid.dy
 
@@ -183,11 +197,17 @@ getys(g::VortGrid) = -g.grid.D*0.5+0.5*g.grid.dy:g.grid.dy:g.grid.D*0.5-0.5*g.gr
 
 function VortGrid(u::UGrid, v::VGrid)
     vort = VortGrid(u.grid)
-    for ei in eachindex(vort)
-        i,j = Tuple(ei)
-        dvdx = (projectionU(v, i+1, j) - projectionU(v, i, j)) / v.grid.dx
-        dudy = (projectionV(u, i, j+1) - projectionV(u, i, j)) / v.grid.dy
-        vort[ei] = dvdx - dudy
+    for I in eachindex(vort)
+        i,j = Tuple(I)
+        vsleft = v[neighbours(UGrid, atleft(VortGrid, I))]
+        vsright = v[neighbours(UGrid, atright(VortGrid, I))]
+        usbot = u[neighbours(VGrid, atbot(VortGrid, I))]
+        ustop = u[neighbours(VGrid, attop(VortGrid, I))]
+        # dvdx = (projectionU(v, i+1, j) - projectionU(v, i, j)) / v.grid.dx
+        dvdx = (average(vsright) - average(vsleft)) / v.grid.dx
+        # dudy = (projectionV(u, i, j+1) - projectionV(u, i, j)) / v.grid.dy
+        dudy = (average(ustop) - average(usbot)) / u.grid.dy
+        vort[I] = dvdx - dudy
     end
     vort
 end
@@ -214,4 +234,17 @@ function DivGrid(u::UGrid, v::VGrid)
     div
 end
 
+atleft(::Type{<:AbstractGrid}, i, j) = CartesianIndex(i, j+1)
+atbot(::Type{<:AbstractGrid}, i, j) = CartesianIndex(i+1, j)
+atright(::Type{<:AbstractGrid}, i, j) = CartesianIndex(i+1, j+1)
+attop(::Type{<:AbstractGrid}, i, j) = CartesianIndex(i+1, j+1)
+
+atleft(g, I::CartesianIndex) = atleft(g, Tuple(I)...)
+atbot(g, I::CartesianIndex) = atbot(g, Tuple(I)...)
+atright(g, I::CartesianIndex) = atright(g, Tuple(I)...)
+attop(g, I::CartesianIndex) = attop(g, Tuple(I)...)
 # trueview(g::VortGrid) = @view g.mesh[:, :]
+
+function DimensionalData.DimArray(g::AbstractGrid)
+    DimArray(parent(g), (X(getxs(g) |> collect), Y(getys(g) |> collect)))
+end

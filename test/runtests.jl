@@ -4,18 +4,20 @@ using GLMakie
 using Test
 using Logging
 using Rasters
-
+using DimensionalData
 bn = BottleNeckFlow
 
 ENV["JULIA_DEBUG"] = BottleNeckFlow
+ENV["JULIA_DEBUG"] = ""
 
 H = 1.
 canal = CanalConfig(H)
 params = SimParam()
-params.cfl = 0.05
+params.cfl = 0.3
 params.tol = 1e-3
 params.dtdτ = 0.1
 params.ramp = 400
+gridbox = GridBox(canal, .1)
 gridbox = GridBox(canal, .05)
 Re = 250
 ubar = 3.
@@ -31,6 +33,7 @@ y = δ(x, canal)
 u = UGrid(gridbox)
 xu = getxs(u) |> collect
 yu = getys(u) |> collect
+dimarray_u = DimArray(u)
 
 v = VGrid(gridbox)
 getxs(v) |> collect
@@ -41,27 +44,39 @@ getxs(p) |> collect
 getys(p) |> collect
 
 poiseuille!(u, canal, params)
+poiseuille!(u, gridbox, params)
+# @time poiseuille!(u, gridbox, params)
+# @btime poiseuille!(u, gridbox, 1)
+# @btime bn.poiseuille2!(u, gridbox, 1)
+# @btime bn.poiseuille3!(u, gridbox, 1)
+# @btime bn.poiseuille4!(u, gridbox, 1)
 
 vort = VortGrid(u.grid)
 vort = VortGrid(u, v)
+vort = VortGrid(sim.u, sim.v)
 
-io = open("log.log", "w")
+io = open("logcfl03.log", "w")
 
 sim = Simulation(params, gridbox, canal, SimpleLogger(io))
 sim = Simulation(params, gridbox, canal)
 
-fillghost!(sim.u, noslip, noslip)
-fillghost!(sim.v, noslip, naturalbound)
+poiseuille!(sim)
+
+# fillghost!(sim.u, noslip, noslip)
+fillghost!(sim.u)
+# fillghost!(sim.v, noslip, naturalbound)
+fillghost!(sim.v)
 bn.rightboundary!(sim)
 step_euler!(sim)
+for i in 1:1000 step_euler!(sim); sim.step = sim.step + 1; end
 step_poisson!(sim, 1e-5)
 poisson_project!(sim)
 
-poiseuille!(sim)
 bn.boundaries!(sim)
 bn.make_step!(sim)
 
-@async runsim!(sim, 20)
+runsim!(sim, 50000)
+sim = @async runsim(gridbox, canal, 500)
 
 xu = getxs(sim.u) |> collect
 yu = getys(sim.u) |> collect
@@ -162,6 +177,29 @@ gp = griddedplot!(ax2, sim.v)
 gp = griddedplot!(ax2, sim.p)
 gp = griddedplot!(ax3, div)
 contourf!(getxs(div), getys(div), div.mesh)
+
+da = DimArray(u)
+f = Figure()
+ax = Axis(f[1,1])
+bn.vertcut!(ax, u, [0, 1, 2, 4, 5, 8])
+f
+
+bn.vertcut(sim.u, [0, 1, 2, 4, 5, 8, 16], canal)
+bn.vertcut(sim.u, [0, 2, 3.5, 4, 4.2, 8, 16], canal)
+bn.vertcut(sim.v, [0, 1, 2, 4, 5, 8, 16], canal)
+bn.vertcut(sim.v, [0, 2, 4, 10], canal)
+bn.vertcut(sim.v, [0, 10], canal)
+bn.vertcut(sim.u, [0, 16], canal)
+bn.vertcut(VortGrid(sim.u, sim.v), [0, 1, 2, 4, 5, 8, 16], canal)
+bn.vertcut(DivGrid(sim.u, sim.v), [0, 1, 2, 4, 4.2, 8, 16], canal)
+bn.vertcut(sim.p, [0, 1, 2, 4, 5, 8, 16], canal)
+
+bn.flowrate(sim.u[1, 2:end-1], sim.u.grid.dy)
+plot(getxs(sim.u), bn.flowrate(sim.u))
+
+plot(sim.u[end, :], getys(sim.u))
+plot!(sim.u[end-1, :], getys(sim.u))
+current_figure()
 @testset "BottleNeckFlow.jl" begin
     # Write your tests here.
 end

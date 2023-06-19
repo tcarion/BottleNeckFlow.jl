@@ -19,3 +19,13 @@ function reynhvort(sim::Simulation)
     maxvort = maximum(vort)
     maxvort * min(sim.u.grid.dx, sim.v.grid.dy)^2 / getnu(sim.params, sim.u.grid)
 end
+
+flowrate(v::AbstractVector, h) = trapezoid(v, h)
+
+function flowrate(g::AbstractGrid)
+    Qs = Float64[]
+    for col in eachrow(truegrid(g))
+        push!(Qs, flowrate(col, g.grid.dy))
+    end
+    Qs
+end

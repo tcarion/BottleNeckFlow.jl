@@ -50,3 +50,6 @@ end
 
 _3dim(grid) = reshape(grid |> Matrix, (size(grid)..., 1))
 
+function UGrid(rast::AbstractRaster)
+    
+end

@@ -41,6 +41,8 @@ mutable struct Simulation
     canal::CanalConfig
     logger::AbstractLogger
     step::Int
+    uprev::Union{Nothing, UGrid}
+    vprev::Union{Nothing, VGrid}
 end
 
 function Simulation(params::SimParam, gridbox::GridBox, canal::CanalConfig, logger = DEFAULT_LOGGER())
@@ -53,7 +55,9 @@ function Simulation(params::SimParam, gridbox::GridBox, canal::CanalConfig, logg
         dt,
         canal,
         logger,
-        0
+        0,
+        nothing,
+        nothing
         )
 end
 function Simulation(fname::String, logger = DEFAULT_LOGGER())
@@ -77,7 +81,9 @@ function Simulation(fname::String, logger = DEFAULT_LOGGER())
             dt,
             canal,
             logger,
-            step
+            step,
+            nothing,
+            nothing
         )
     end
 end
@@ -104,6 +110,8 @@ function Base.copy(sim::Simulation)
         sim.dt,
         sim.canal,
         sim.logger,
-        sim.step
+        sim.step,
+        nothing,
+        nothing
     )
 end

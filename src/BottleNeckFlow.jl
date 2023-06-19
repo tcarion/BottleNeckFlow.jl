@@ -5,8 +5,9 @@ using Makie
 using Logging
 using NCDatasets
 using Dates
+using DimensionalData
 # using DataStructures
-# using Rasters
+using Rasters
 
 export
     Simulation, 
@@ -32,8 +33,11 @@ export
     step_poisson!,
     poisson_project!,
     runsim!,
+    runsim,
     create,
-    add_to_nc
+    add_to_nc,
+    vertcut,
+    flowrate
 
 include("utils.jl")
 include("constants.jl")
@@ -42,7 +46,7 @@ include("mesh.jl")
 include("simulation.jl")
 include("poiseuille.jl")
 include("schemes.jl")
-include("diagnostic.jl")
+include("diagnosis.jl")
 include("io.jl")
 include("run.jl")
 

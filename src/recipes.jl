@@ -81,3 +81,41 @@ function Makie.plot!(gp::PlotGridArg)
 
     scatter!(gp, [(x, y) for x in getxs(grid.val) for y in getys(grid.val)], marker = gp.marker)
 end
+
+function vertcut(g::AbstractGrid, xs::AbstractVector, canal::CanalConfig)
+    da = DimArray(g)
+    vertcut(da, xs, canal)
+end
+function vertcut(da::AbstractDimArray, xs::AbstractVector, canal::CanalConfig)
+    f = Figure()
+    gltop = f[1, 1] = GridLayout()
+    contax = Axis(gltop[2, 1], aspect = DataAspect())
+    vertax = Axis(f[2, 1])
+    x = range(0, canal.L, length = 101)
+    # cont = griddedplot!(contax, g)
+    cont = contourf!(contax, dims(da, :X) |> collect, dims(da, :Y) |> collect, da |> Matrix, colormap = :jet)
+    # cont = contourf!(contax, getxs(g), getys(g), g, colormap = :jet)
+    Colorbar(gltop[1, 1], cont, vertical = false)
+    canalplot!(contax, x, canal, color = :black)
+    vertcut!(vertax, da, xs)
+    for x in xs 
+        vlines!(contax, x)
+    end
+    f
+end
+
+function vertcut!(ax, g::AbstractGrid, xs::AbstractVector)
+    da = DimArray(g)
+    vertcut!(ax, da, xs)
+end
+
+function vertcut!(ax, da::AbstractDimArray, xs::AbstractVector)
+    ys = dims(da, :Y) |> collect
+
+    for x in xs
+        vcut = da[X(Near(x))]
+        scatterlines!(ax, vcut, ys, label = "x = $x")
+        # lines!(ax, vcut, ys, label = "x = $x")
+    end
+    axislegend()
+end
